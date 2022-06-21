@@ -1,115 +1,183 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+import 'shared/data.dart';
 
-class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+void main() => runApp(App());
 
-  // This widget is the root of your application.
+class App extends StatelessWidget {
+  App({Key? key}) : super(key: key);
+
+  final loginInfo = LoginInfo();
+  static const title = 'GoRouter Example: Named Routes';
+
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
+  Widget build(BuildContext context) => ChangeNotifierProvider<LoginInfo>.value(
+        value: loginInfo,
+        child: MaterialApp.router(
+          routeInformationParser: _router.routeInformationParser,
+          routerDelegate: _router.routerDelegate,
+          title: title,
+          debugShowCheckedModeBanner: false,
+        ),
+      );
+
+  late final _router = GoRouter(
+    debugLogDiagnostics: true,
+    routes: [
+      GoRoute(
+        name: 'home',
+        path: '/',
+        builder: (context, state) => HomeScreen(families: Families.data),
+        routes: [
+          GoRoute(
+            name: 'family',
+            path: 'family/:fid',
+            builder: (context, state) => FamilyScreen(
+              family: Families.family(state.params['fid']!),
+            ),
+            routes: [
+              GoRoute(
+                name: 'person',
+                path: 'person/:pid',
+                builder: (context, state) {
+                  final family = Families.family(state.params['fid']!);
+                  final person = family.person(state.params['pid']!);
+                  return PersonScreen(family: family, person: person);
+                },
+              ),
+            ],
+          ),
+        ],
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
-  }
+      GoRoute(
+        name: 'login',
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+    ],
+
+    // redirect to the login page if the user is not logged in
+    redirect: (state) {
+      // if the user is not logged in, they need to login
+      final loggedIn = loginInfo.loggedIn;
+      final loginloc = state.namedLocation('login');
+      final loggingIn = state.subloc == loginloc;
+
+      // bundle the location the user is coming from into a query parameter
+      final homeloc = state.namedLocation('home');
+      final fromloc = state.subloc == homeloc ? '' : state.subloc;
+      if (!loggedIn) {
+        return loggingIn
+            ? null
+            : state.namedLocation(
+                'login',
+                queryParams: {if (fromloc.isNotEmpty) 'from': fromloc},
+              );
+      }
+
+      // if the user is logged in, send them where they were going before (or
+      // home if they weren't going anywhere)
+      if (loggingIn) return state.queryParams['from'] ?? homeloc;
+
+      // no need to redirect at all
+      return null;
+    },
+
+    // changes on the listenable will cause the router to refresh it's route
+    refreshListenable: loginInfo,
+  );
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({Key? key, required this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({required this.families, Key? key}) : super(key: key);
+  final List<Family> families;
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final info = context.read<LoginInfo>();
+
     return Scaffold(
       appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text(App.title),
+        actions: [
+          IconButton(
+            onPressed: info.logout,
+            tooltip: 'Logout: ${info.userName}',
+            icon: const Icon(Icons.logout),
+          )
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
-          ],
-        ),
+      body: ListView(
+        children: [
+          for (final f in families)
+            ListTile(
+              title: Text(f.name),
+              onTap: () => context.goNamed('family', params: {'fid': f.id}),
+            )
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
+}
+
+class FamilyScreen extends StatelessWidget {
+  const FamilyScreen({required this.family, Key? key}) : super(key: key);
+  final Family family;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(family.name)),
+        body: ListView(
+          children: [
+            for (final p in family.people)
+              ListTile(
+                title: Text(p.name),
+                onTap: () => context.go(context.namedLocation(
+                  'person',
+                  params: {'fid': family.id, 'pid': p.id},
+                  queryParams: {'qid': 'quid'},
+                )),
+              ),
+          ],
+        ),
+      );
+}
+
+class PersonScreen extends StatelessWidget {
+  const PersonScreen({required this.family, required this.person, Key? key})
+      : super(key: key);
+
+  final Family family;
+  final Person person;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(person.name)),
+        body: Text('${person.name} ${family.name} is ${person.age} years old'),
+      );
+}
+
+class LoginScreen extends StatelessWidget {
+  const LoginScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text(App.title)),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: () {
+                  // log a user in, letting all the listeners know
+                  context.read<LoginInfo>().login('test-user');
+                },
+                child: const Text('Login'),
+              ),
+            ],
+          ),
+        ),
+      );
 }
